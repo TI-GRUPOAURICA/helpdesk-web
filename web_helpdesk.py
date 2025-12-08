@@ -70,10 +70,10 @@ if menu == "📝 Reportar Incidencia":
     with st.form("formulario_ticket", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            usuario = st.text_input("Su Nombre / Empresa")
+            usuario = st.text_input("Su Nombre Completo")
             obra = st.text_input("Obra / Sede")
         with col2:
-            inventario = st.text_input("Nro de Inventario")
+            inventario = st.text_input("Cod de Inventario")
             prioridad = st.selectbox("Prioridad", ["Baja", "Normal", "Alta", "URGENTE"], index=1)
         
         asunto = st.text_input("Asunto Corto")
@@ -169,4 +169,5 @@ elif menu == "🔒 Panel Administrador":
     else:
         if password:
             st.error("Contraseña incorrecta")
+
         st.info("Ingrese la contraseña en la barra lateral izquierda para acceder.")
