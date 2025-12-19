@@ -197,6 +197,7 @@ elif menu == "🔒 Panel Administrador":
             )
 
         # === TAB 2: ATENDER TICKETS (ESTADO Y COMENTARIOS) ===
+       # === TAB 2: ATENDER TICKETS (ESTADO Y COMENTARIOS) ===
         with tab2:
             st.subheader("Actualizar Estado del Ticket")
             col_a1, col_a2 = st.columns([1, 3])
@@ -212,15 +213,17 @@ elif menu == "🔒 Panel Administrador":
                 
                 with st.form("form_atencion"):
                     nuevo_estado = st.selectbox("Nuevo Estado", ["Abierto", "En Proceso", "Cerrado"], index=0)
-                    # --- CÓDIGO NUEVO Y SEGURO (COPIA ESTO) ---
-valor_comentario = ""
-# Verificamos si la columna existe antes de intentar leerla
-if 'comentarios' in df.columns:
-    if ticket_actual.iloc[0]['comentarios']:
-        valor_comentario = ticket_actual.iloc[0]['comentarios']
-
-nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", value=valor_comentario)
                     
+                    # --- BLOQUE SEGURO PARA COMENTARIOS ---
+                    valor_comentario = ""
+                    if 'comentarios' in df.columns:
+                        val = ticket_actual.iloc[0]['comentarios']
+                        if val is not None and str(val).strip() != "":
+                            valor_comentario = str(val)
+
+                    nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", value=valor_comentario)
+                    
+                    # --- BOTÓN ALINEADO CORRECTAMENTE ---
                     btn_actualizar = st.form_submit_button("💾 Guardar Cambios")
                     
                     if btn_actualizar:
@@ -228,26 +231,29 @@ nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", 
                         
                         # Lógica para fecha de cierre
                         if nuevo_estado == "Cerrado":
-                            # Si ya tenía fecha, la mantenemos, si no, ponemos la actual
                             fecha_cierre_val = datetime.datetime.now()
                         
-                        # SQL dinámico dependiendo si cerramos o no
-                        if nuevo_estado == "Cerrado":
+                        # Verificamos si existen las columnas antes de guardar
+                        col_comentarios_ok = 'comentarios' in df.columns
+                        col_fecha_ok = 'fecha_cierre' in df.columns
+
+                        # Armamos la consulta SQL dinámicamente según lo que tengas
+                        if nuevo_estado == "Cerrado" and col_fecha_ok and col_comentarios_ok:
                             sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
                             params = (nuevo_estado, nuevo_comentario, fecha_cierre_val, id_atender)
-                        else:
-                            # Si lo reabrimos, podríamos querer limpiar la fecha de cierre o dejarla.
-                            # Aquí actualizamos estado y comentario solamente
+                        elif col_comentarios_ok:
                             sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s WHERE id=%s"
                             params = (nuevo_estado, nuevo_comentario, id_atender)
+                        else:
+                            # Caso de respaldo por si no se crearon las columnas
+                            sql = "UPDATE incidencias_v2 SET estado=%s WHERE id=%s"
+                            params = (nuevo_estado, id_atender)
                             
                         run_query(sql, params)
                         st.success(f"Ticket #{id_atender} actualizado correctamente.")
                         st.rerun()
             else:
                 st.warning("Ingrese un ID válido para ver detalles.")
-
-        # === TAB 3: EDITAR O ELIMINAR (CORRECCIONES) ===
         with tab3:
             st.subheader("✏️ Corregir Datos o 🗑 Eliminar")
             
@@ -292,6 +298,7 @@ nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", 
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
 
 
