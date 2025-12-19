@@ -123,6 +123,41 @@ elif menu == "🔒 Panel Administrador":
     password = st.sidebar.text_input("Contraseña Admin", type="password")
     
     if password == "admin123": 
+        if password == "admin123": 
+        
+        # --- BOTÓN DE REPARACIÓN DE EMERGENCIA ---
+        with st.expander("🔧 HERRAMIENTAS DE BASE DE DATOS (Usar si faltan columnas)"):
+            if st.button("Forzar Actualización de Columnas"):
+                conn = get_connection()
+                cursor = conn.cursor()
+                errores = []
+                
+                # Intentar agregar 'comentarios'
+                try:
+                    cursor.execute("ALTER TABLE incidencias_v2 ADD COLUMN comentarios TEXT")
+                    st.success("✅ Columna 'comentarios' creada exitosamente.")
+                except Exception as e:
+                    errores.append(f"Info 'comentarios': {e}")
+
+                # Intentar agregar 'fecha_cierre'
+                try:
+                    cursor.execute("ALTER TABLE incidencias_v2 ADD COLUMN fecha_cierre DATETIME")
+                    st.success("✅ Columna 'fecha_cierre' creada exitosamente.")
+                except Exception as e:
+                    errores.append(f"Info 'fecha_cierre': {e}")
+                
+                conn.commit()
+                conn.close()
+                
+                if errores:
+                    st.info("Resultado de la actualización: " + " | ".join(errores))
+                else:
+                    st.balloons()
+                    st.rerun()
+        
+        # --- AQUÍ SIGUE TU CÓDIGO NORMAL (Cargar datos, Tabs, etc.) ---
+        conn = get_connection()
+        # ...
         
         # Cargar datos
         conn = get_connection()
@@ -182,7 +217,14 @@ elif menu == "🔒 Panel Administrador":
                 
                 with st.form("form_atencion"):
                     nuevo_estado = st.selectbox("Nuevo Estado", ["Abierto", "En Proceso", "Cerrado"], index=0)
-                    nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", value=ticket_actual.iloc[0]['comentarios'] if ticket_actual.iloc[0]['comentarios'] else "")
+                    # --- CÓDIGO NUEVO Y SEGURO (COPIA ESTO) ---
+valor_comentario = ""
+# Verificamos si la columna existe antes de intentar leerla
+if 'comentarios' in df.columns:
+    if ticket_actual.iloc[0]['comentarios']:
+        valor_comentario = ticket_actual.iloc[0]['comentarios']
+
+nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", value=valor_comentario)
                     
                     btn_actualizar = st.form_submit_button("💾 Guardar Cambios")
                     
@@ -255,4 +297,5 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
