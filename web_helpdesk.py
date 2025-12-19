@@ -164,6 +164,8 @@ elif menu == "🔒 Panel Administrador":
         tab1, tab2, tab3 = st.tabs(["📊 Tablero y Reportes", "🛠 Atender Tickets", "✏️ Editar/Eliminar"])
 
         # === TAB 1: VISUALIZACIÓN ===
+        # === TAB 1: VISUALIZACIÓN ===
+        # === TAB 1: VISUALIZACIÓN ===
         with tab1:
             # KPIs
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
@@ -181,8 +183,22 @@ elif menu == "🔒 Panel Administrador":
             
             df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
             
-            # Mostramos la tabla con las nuevas columnas
-            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+            # --- TABLA CONFIGURADA PARA MOSTRAR DETALLES ---
+            st.dataframe(
+                df_mostrar,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", format="%d", width="small"),
+                    "fecha": st.column_config.DatetimeColumn("Reportado", format="D/M/YYYY h:mm a"),
+                    "usuario": "Usuario",
+                    "asunto": "Asunto",
+                    # AQUI configuramos las columnas nuevas para que se vean sí o sí
+                    "comentarios": st.column_config.TextColumn("🔧 Detalles Técnicos", width="medium"),
+                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Cierre / Actualización", format="D/M/YYYY h:mm a"),
+                    "estado": st.column_config.TextColumn("Estado"),
+                }
+            )
 
             # Exportar Excel
             st.divider()
@@ -195,65 +211,52 @@ elif menu == "🔒 Panel Administrador":
                 file_name=f"Reporte_HelpDesk_{datetime.date.today()}.xlsx",
                 mime="application/vnd.ms-excel"
             )
+        # === TAB 1: VISUALIZACIÓN ===
+        with tab1:
+            # KPIs
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            kpi1.metric("Total Tickets", len(df))
+            kpi2.metric("Abiertos", len(df[df['estado']=='Abierto']), delta_color="inverse")
+            kpi3.metric("En Proceso", len(df[df['estado']=='En Proceso']), delta_color="off")
+            kpi4.metric("Cerrados", len(df[df['estado']=='Cerrado']), delta_color="normal")
 
-        # === TAB 2: ATENDER TICKETS (ESTADO Y COMENTARIOS) ===
-       # === TAB 2: ATENDER TICKETS (ESTADO Y COMENTARIOS) ===
-        with tab2:
-            st.subheader("Actualizar Estado del Ticket")
-            col_a1, col_a2 = st.columns([1, 3])
+            st.divider()
             
-            with col_a1:
-                id_atender = st.number_input("ID del Ticket a atender:", min_value=1, step=1)
+            # Filtros
+            col_filtro1, col_filtro2 = st.columns(2)
+            with col_filtro1:
+                filtro_estado = st.selectbox("Filtrar por Estado:", ["Todos", "Abierto", "En Proceso", "Cerrado"])
             
-            # Buscamos el ticket seleccionado para mostrar info actual
-            ticket_actual = df[df['id'] == id_atender]
+            df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
             
-            if not ticket_actual.empty:
-                st.info(f"Ticket #{id_atender} - {ticket_actual.iloc[0]['asunto']} (Usuario: {ticket_actual.iloc[0]['usuario']})")
-                
-                with st.form("form_atencion"):
-                    nuevo_estado = st.selectbox("Nuevo Estado", ["Abierto", "En Proceso", "Cerrado"], index=0)
-                    
-                    # --- BLOQUE SEGURO PARA COMENTARIOS ---
-                    valor_comentario = ""
-                    if 'comentarios' in df.columns:
-                        val = ticket_actual.iloc[0]['comentarios']
-                        if val is not None and str(val).strip() != "":
-                            valor_comentario = str(val)
+            # --- TABLA CONFIGURADA PARA MOSTRAR DETALLES ---
+            st.dataframe(
+                df_mostrar,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", format="%d", width="small"),
+                    "fecha": st.column_config.DatetimeColumn("Reportado", format="D/M/YYYY h:mm a"),
+                    "usuario": "Usuario",
+                    "asunto": "Asunto",
+                    # AQUI configuramos las columnas nuevas para que se vean sí o sí
+                    "comentarios": st.column_config.TextColumn("🔧 Detalles Técnicos", width="medium"),
+                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Cierre / Actualización", format="D/M/YYYY h:mm a"),
+                    "estado": st.column_config.TextColumn("Estado"),
+                }
+            )
 
-                    nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", value=valor_comentario)
-                    
-                    # --- BOTÓN ALINEADO CORRECTAMENTE ---
-                    btn_actualizar = st.form_submit_button("💾 Guardar Cambios")
-                    
-                    if btn_actualizar:
-                        fecha_cierre_val = None
-                        
-                        # Lógica para fecha de cierre
-                        if nuevo_estado == "Cerrado":
-                            fecha_cierre_val = datetime.datetime.now()
-                        
-                        # Verificamos si existen las columnas antes de guardar
-                        col_comentarios_ok = 'comentarios' in df.columns
-                        col_fecha_ok = 'fecha_cierre' in df.columns
-
-                        # Armamos la consulta SQL dinámicamente según lo que tengas
-                        if nuevo_estado == "Cerrado" and col_fecha_ok and col_comentarios_ok:
-                            sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
-                            params = (nuevo_estado, nuevo_comentario, fecha_cierre_val, id_atender)
-                        elif col_comentarios_ok:
-                            sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s WHERE id=%s"
-                            params = (nuevo_estado, nuevo_comentario, id_atender)
-                        else:
-                            # Caso de respaldo por si no se crearon las columnas
-                            sql = "UPDATE incidencias_v2 SET estado=%s WHERE id=%s"
-                            params = (nuevo_estado, id_atender)
-                            
-                        run_query(sql, params)
-                        st.success(f"Ticket #{id_atender} actualizado correctamente.")
-                        st.rerun()
-            else:
-                st.warning("Ingrese un ID válido para ver detalles.")
+            # Exportar Excel
+            st.divider()
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Reporte')
+            st.download_button(
+                label="📥 Descargar Excel Completo",
+                data=buffer,
+                file_name=f"Reporte_HelpDesk_{datetime.date.today()}.xlsx",
+                mime="application/vnd.ms-excel"
+            )
         with tab3:
             st.subheader("✏️ Corregir Datos o 🗑 Eliminar")
             
@@ -298,6 +301,7 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
 
 
