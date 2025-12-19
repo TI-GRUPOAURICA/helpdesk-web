@@ -123,7 +123,6 @@ elif menu == "🔒 Panel Administrador":
     password = st.sidebar.text_input("Contraseña Admin", type="password")
     
     if password == "admin123": 
-        if password == "admin123": 
         
         # --- BOTÓN DE REPARACIÓN DE EMERGENCIA ---
         with st.expander("🔧 HERRAMIENTAS DE BASE DE DATOS (Usar si faltan columnas)"):
@@ -155,11 +154,7 @@ elif menu == "🔒 Panel Administrador":
                     st.balloons()
                     st.rerun()
         
-        # --- AQUÍ SIGUE TU CÓDIGO NORMAL (Cargar datos, Tabs, etc.) ---
-        conn = get_connection()
-        # ...
-        
-        # Cargar datos
+# Cargar datos
         conn = get_connection()
         # Leemos todas las columnas nuevas también
         df = pd.read_sql("SELECT * FROM incidencias_v2 ORDER BY id DESC", conn)
@@ -297,5 +292,6 @@ nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", 
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
 
