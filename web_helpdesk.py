@@ -40,11 +40,9 @@ def run_query(query, params=()):
         st.error(f"Error de base de datos: {e}")
         return None
 
-# Aseguramos que la tabla exista (con las nuevas columnas si es instalación nueva)
-# --- BUSCA ESTA FUNCIÓN Y REEMPLAZALA POR ESTA VERSIÓN ---
-
+# Función de inicialización ROBUSTA (Intenta crear/reparar todo al inicio)
 def inicializar_bd():
-    # 1. Crear tabla base si no existe (estructura original)
+    # 1. Crear tabla base
     sql_create = """CREATE TABLE IF NOT EXISTS incidencias_v2 (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 fecha DATETIME,
@@ -58,8 +56,8 @@ def inicializar_bd():
             )"""
     run_query(sql_create)
 
-    # 2. PARCHE: Intentar agregar las columnas nuevas manualmente
-    # Usamos try/except para que si ya existen, no se rompa el programa
+    # 2. AUTO-REPARACIÓN SILENCIOSA
+    # Intenta agregar las columnas nuevas si no existen, para que no falle.
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -67,7 +65,7 @@ def inicializar_bd():
         conn.commit()
         conn.close()
     except Exception:
-        pass # Si falla, asumimos que la columna ya existe
+        pass 
 
     try:
         conn = get_connection()
@@ -76,7 +74,9 @@ def inicializar_bd():
         conn.commit()
         conn.close()
     except Exception:
-        pass # Si falla, asumimos que la columna ya existe
+        pass
+
+inicializar_bd()
 
 # --- 3. BARRA LATERAL (NAVEGACIÓN) ---
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/6821/6821002.png", width=100)
@@ -107,7 +107,7 @@ if menu == "📝 Reportar Incidencia":
                 st.warning("⚠️ Por favor complete todos los campos obligatorios.")
             else:
                 fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                # Insertamos solo los datos básicos, el resto queda NULL o Default
+                # Insertamos solo lo básico
                 sql = """INSERT INTO incidencias_v2 
                          (fecha, usuario, obra, inventario, asunto, descripcion, prioridad, estado) 
                          VALUES (%s, %s, %s, %s, %s, %s, %s, 'Abierto')"""
@@ -124,48 +124,36 @@ elif menu == "🔒 Panel Administrador":
     
     if password == "admin123": 
         
-        # --- BOTÓN DE REPARACIÓN DE EMERGENCIA ---
+        # --- BOTÓN DE REPARACIÓN MANUAL (Por si acaso) ---
         with st.expander("🔧 HERRAMIENTAS DE BASE DE DATOS (Usar si faltan columnas)"):
             if st.button("Forzar Actualización de Columnas"):
                 conn = get_connection()
                 cursor = conn.cursor()
                 errores = []
-                
-                # Intentar agregar 'comentarios'
                 try:
                     cursor.execute("ALTER TABLE incidencias_v2 ADD COLUMN comentarios TEXT")
-                    st.success("✅ Columna 'comentarios' creada exitosamente.")
+                    st.success("✅ Columna 'comentarios' verificada.")
                 except Exception as e:
-                    errores.append(f"Info 'comentarios': {e}")
-
-                # Intentar agregar 'fecha_cierre'
+                    errores.append(str(e))
                 try:
                     cursor.execute("ALTER TABLE incidencias_v2 ADD COLUMN fecha_cierre DATETIME")
-                    st.success("✅ Columna 'fecha_cierre' creada exitosamente.")
+                    st.success("✅ Columna 'fecha_cierre' verificada.")
                 except Exception as e:
-                    errores.append(f"Info 'fecha_cierre': {e}")
-                
-                conn.commit()
+                    errores.append(str(e))
                 conn.close()
-                
-                if errores:
-                    st.info("Resultado de la actualización: " + " | ".join(errores))
-                else:
+                if not errores:
                     st.balloons()
                     st.rerun()
-        
-# Cargar datos
+
+        # Cargar datos frescos
         conn = get_connection()
-        # Leemos todas las columnas nuevas también
         df = pd.read_sql("SELECT * FROM incidencias_v2 ORDER BY id DESC", conn)
         conn.close()
 
-        # --- PESTAÑAS DE ADMINISTRACIÓN ---
+        # Pestañas de administración
         tab1, tab2, tab3 = st.tabs(["📊 Tablero y Reportes", "🛠 Atender Tickets", "✏️ Editar/Eliminar"])
 
         # === TAB 1: VISUALIZACIÓN ===
-        # === TAB 1: VISUALIZACIÓN ===
-        # === TAB 1: VISUALIZACIÓN ===
         with tab1:
             # KPIs
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
@@ -183,7 +171,7 @@ elif menu == "🔒 Panel Administrador":
             
             df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
             
-            # --- TABLA CONFIGURADA PARA MOSTRAR DETALLES ---
+            # TABLA CONFIGURADA
             st.dataframe(
                 df_mostrar,
                 use_container_width=True,
@@ -193,9 +181,8 @@ elif menu == "🔒 Panel Administrador":
                     "fecha": st.column_config.DatetimeColumn("Reportado", format="D/M/YYYY h:mm a"),
                     "usuario": "Usuario",
                     "asunto": "Asunto",
-                    # AQUI configuramos las columnas nuevas para que se vean sí o sí
                     "comentarios": st.column_config.TextColumn("🔧 Detalles Técnicos", width="medium"),
-                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Cierre / Actualización", format="D/M/YYYY h:mm a"),
+                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Actualizado", format="D/M/YYYY h:mm a"),
                     "estado": st.column_config.TextColumn("Estado"),
                 }
             )
@@ -211,52 +198,64 @@ elif menu == "🔒 Panel Administrador":
                 file_name=f"Reporte_HelpDesk_{datetime.date.today()}.xlsx",
                 mime="application/vnd.ms-excel"
             )
-        # === TAB 1: VISUALIZACIÓN ===
-        with tab1:
-            # KPIs
-            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-            kpi1.metric("Total Tickets", len(df))
-            kpi2.metric("Abiertos", len(df[df['estado']=='Abierto']), delta_color="inverse")
-            kpi3.metric("En Proceso", len(df[df['estado']=='En Proceso']), delta_color="off")
-            kpi4.metric("Cerrados", len(df[df['estado']=='Cerrado']), delta_color="normal")
 
-            st.divider()
+        # === TAB 2: ATENDER TICKETS ===
+        with tab2:
+            st.subheader("Actualizar Estado del Ticket")
+            col_a1, col_a2 = st.columns([1, 3])
             
-            # Filtros
-            col_filtro1, col_filtro2 = st.columns(2)
-            with col_filtro1:
-                filtro_estado = st.selectbox("Filtrar por Estado:", ["Todos", "Abierto", "En Proceso", "Cerrado"])
+            with col_a1:
+                id_atender = st.number_input("ID del Ticket a atender:", min_value=1, step=1)
             
-            df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
+            ticket_actual = df[df['id'] == id_atender]
             
-            # --- TABLA CONFIGURADA PARA MOSTRAR DETALLES ---
-            st.dataframe(
-                df_mostrar,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "id": st.column_config.NumberColumn("ID", format="%d", width="small"),
-                    "fecha": st.column_config.DatetimeColumn("Reportado", format="D/M/YYYY h:mm a"),
-                    "usuario": "Usuario",
-                    "asunto": "Asunto",
-                    # AQUI configuramos las columnas nuevas para que se vean sí o sí
-                    "comentarios": st.column_config.TextColumn("🔧 Detalles Técnicos", width="medium"),
-                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Cierre / Actualización", format="D/M/YYYY h:mm a"),
-                    "estado": st.column_config.TextColumn("Estado"),
-                }
-            )
+            if not ticket_actual.empty:
+                st.info(f"Ticket #{id_atender} - {ticket_actual.iloc[0]['asunto']} (Usuario: {ticket_actual.iloc[0]['usuario']})")
+                
+                with st.form("form_atencion"):
+                    estado_actual = ticket_actual.iloc[0]['estado']
+                    opciones = ["Abierto", "En Proceso", "Cerrado"]
+                    idx = opciones.index(estado_actual) if estado_actual in opciones else 0
+                    
+                    nuevo_estado = st.selectbox("Nuevo Estado", opciones, index=idx)
+                    
+                    # Cargar comentario existente de forma segura
+                    valor_comentario = ""
+                    if 'comentarios' in df.columns:
+                        val = ticket_actual.iloc[0]['comentarios']
+                        if val is not None and str(val).strip() != "":
+                            valor_comentario = str(val)
 
-            # Exportar Excel
-            st.divider()
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Reporte')
-            st.download_button(
-                label="📥 Descargar Excel Completo",
-                data=buffer,
-                file_name=f"Reporte_HelpDesk_{datetime.date.today()}.xlsx",
-                mime="application/vnd.ms-excel"
-            )
+                    nuevo_comentario = st.text_area("Comentarios Técnicos / Detalle de atención", value=valor_comentario)
+                    
+                    btn_actualizar = st.form_submit_button("💾 Guardar Cambios")
+                    
+                    if btn_actualizar:
+                        # LOGICA DE FECHA: Guardamos fecha si es Cerrado o En Proceso
+                        fecha_accion = None
+                        if nuevo_estado in ["Cerrado", "En Proceso"]:
+                            fecha_accion = datetime.datetime.now()
+                        
+                        col_comentarios_ok = 'comentarios' in df.columns
+                        col_fecha_ok = 'fecha_cierre' in df.columns
+
+                        if col_fecha_ok and col_comentarios_ok:
+                            sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
+                            params = (nuevo_estado, nuevo_comentario, fecha_accion, id_atender)
+                        elif col_comentarios_ok:
+                            sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s WHERE id=%s"
+                            params = (nuevo_estado, nuevo_comentario, id_atender)
+                        else:
+                            sql = "UPDATE incidencias_v2 SET estado=%s WHERE id=%s"
+                            params = (nuevo_estado, id_atender)
+                            
+                        run_query(sql, params)
+                        st.success(f"Ticket #{id_atender} actualizado exitosamente.")
+                        st.rerun()
+            else:
+                st.warning("Ingrese un ID válido para ver detalles.")
+
+        # === TAB 3: EDITAR O ELIMINAR ===
         with tab3:
             st.subheader("✏️ Corregir Datos o 🗑 Eliminar")
             
@@ -267,7 +266,6 @@ elif menu == "🔒 Panel Administrador":
             ticket_edit = df[df['id'] == id_editar]
             
             if not ticket_edit.empty:
-                # Mostrar formulario precargado para editar
                 with st.expander("✏️ Editar Información (Corregir errores)", expanded=True):
                     with st.form("form_edicion"):
                         e_usuario = st.text_input("Usuario", value=ticket_edit.iloc[0]['usuario'])
@@ -282,8 +280,6 @@ elif menu == "🔒 Panel Administrador":
                             st.rerun()
                 
                 st.divider()
-                
-                # Zona de Peligro: Eliminar
                 st.markdown("### 🚫 Zona de Peligro")
                 col_del1, col_del2 = st.columns([3, 1])
                 with col_del1:
@@ -293,7 +289,6 @@ elif menu == "🔒 Panel Administrador":
                         run_query("DELETE FROM incidencias_v2 WHERE id=%s", (id_editar,))
                         st.error(f"Ticket #{id_editar} eliminado.")
                         st.rerun()
-
             else:
                 st.info("Seleccione un ID existente.")
 
@@ -301,8 +296,4 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
-
-
-
-
 
