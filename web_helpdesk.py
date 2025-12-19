@@ -41,8 +41,11 @@ def run_query(query, params=()):
         return None
 
 # Aseguramos que la tabla exista (con las nuevas columnas si es instalación nueva)
+# --- BUSCA ESTA FUNCIÓN Y REEMPLAZALA POR ESTA VERSIÓN ---
+
 def inicializar_bd():
-    sql = """CREATE TABLE IF NOT EXISTS incidencias_v2 (
+    # 1. Crear tabla base si no existe (estructura original)
+    sql_create = """CREATE TABLE IF NOT EXISTS incidencias_v2 (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 fecha DATETIME,
                 usuario VARCHAR(100),
@@ -51,13 +54,29 @@ def inicializar_bd():
                 asunto VARCHAR(150),
                 descripcion TEXT,
                 prioridad VARCHAR(20),
-                estado VARCHAR(20) DEFAULT 'Abierto',
-                comentarios TEXT,
-                fecha_cierre DATETIME
+                estado VARCHAR(20) DEFAULT 'Abierto'
             )"""
-    run_query(sql)
+    run_query(sql_create)
 
-inicializar_bd()
+    # 2. PARCHE: Intentar agregar las columnas nuevas manualmente
+    # Usamos try/except para que si ya existen, no se rompa el programa
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("ALTER TABLE incidencias_v2 ADD COLUMN comentarios TEXT")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass # Si falla, asumimos que la columna ya existe
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("ALTER TABLE incidencias_v2 ADD COLUMN fecha_cierre DATETIME")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass # Si falla, asumimos que la columna ya existe
 
 # --- 3. BARRA LATERAL (NAVEGACIÓN) ---
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/6821/6821002.png", width=100)
@@ -236,3 +255,4 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
