@@ -81,7 +81,7 @@ inicializar_bd()
 
 # --- 3. BARRA LATERAL (NAVEGACIÓN) ---
 # Cambiamos la URL por el nombre de tu archivo
-st.sidebar.image("xxaxax.jpg", width=150)
+st.sidebar.image("YL", width=150)
 st.sidebar.title("Navegación")
 menu = st.sidebar.radio("Ir a:", ["📝 Reportar Incidencia", "🔍 Rastrear Ticket", "🔒 Panel Administrador"])
 
@@ -359,6 +359,7 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
 
 
