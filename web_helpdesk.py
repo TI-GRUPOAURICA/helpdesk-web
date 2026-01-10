@@ -87,7 +87,7 @@ if menu == "📝 Reportar Incidencia":
     # Selector de Tipo (Al cambiar esto, la página se recarga y oculta/muestra campos)
     tipo_seleccion = st.radio(
         "¿Qué tipo de atención requiere?",
-        ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud / Requerimiento (Necesito algo nuevo)"],
+        ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud "],
         horizontal=True
     )
     
@@ -104,7 +104,7 @@ if menu == "📝 Reportar Incidencia":
             # --- LÓGICA CONDICIONAL ---
             if tipo_bd == "Soporte":
                 # Si es soporte, pedimos el inventario
-                inventario = st.text_input("Cod de Inventario")
+                inventario = st.text_input("Cod de Inventario - MYJ-EI-XXX ")
             else:
                 # Si es solicitud, OCULTAMOS el campo y ponemos valor automático
                 st.info("🔹 Solicitud general (No requiere código de inventario)")
@@ -288,3 +288,4 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
