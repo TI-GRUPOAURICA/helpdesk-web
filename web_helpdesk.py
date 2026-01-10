@@ -106,7 +106,7 @@ if menu == "📝 Reportar Incidencia":
             obra = st.text_input("Obra / Sede")
         with col2:
             if tipo_bd == "Soporte":
-                inventario = st.text_input("Cod de Inventario - MYJ-EI-XXX (Revisar en su equipo algun sticker con estas iniciales, si en caso no tuviera solcitar la ayuda por correo electronico a: lantayhua@ylsolutionsperu.com)")
+                inventario = st.text_input("Cod de Inventario - MYJ-EI-XXX")
             else:
                 st.info("🔹 Solicitud general (No requiere código de inventario)")
                 inventario = "N/A - Solicitud"
@@ -358,6 +358,7 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
 
 
