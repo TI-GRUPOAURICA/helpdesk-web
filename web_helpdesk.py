@@ -40,9 +40,8 @@ def run_query(query, params=()):
         st.error(f"Error de base de datos: {e}")
         return None
 
-# Función de inicialización y AUTO-REPARACIÓN DE COLUMNAS
+# Función de inicialización
 def inicializar_bd():
-    # 1. Crear tabla base
     sql_create = """CREATE TABLE IF NOT EXISTS incidencias_v2 (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 fecha DATETIME,
@@ -56,11 +55,11 @@ def inicializar_bd():
             )"""
     run_query(sql_create)
 
-    # 2. AGREGAR COLUMNAS FALTANTES AUTOMÁTICAMENTE
+    # AUTO-REPARACIÓN DE COLUMNAS
     columnas_nuevas = [
         ("comentarios", "TEXT"),
         ("fecha_cierre", "DATETIME"),
-        ("tipo", "VARCHAR(50)") # <--- NUEVA COLUMNA PARA TIPO (Soporte/Solicitud)
+        ("tipo", "VARCHAR(50)")
     ]
 
     for col_nombre, col_tipo in columnas_nuevas:
@@ -71,7 +70,7 @@ def inicializar_bd():
             conn.commit()
             conn.close()
         except Exception:
-            pass # Si ya existe, ignoramos el error
+            pass 
 
 inicializar_bd()
 
@@ -85,14 +84,13 @@ if menu == "📝 Reportar Incidencia":
     st.title("📝 Reportar Ticket")
     st.markdown("Seleccione el tipo de atención y complete el formulario.")
 
-    # --- NUEVO SELECTOR DE TIPO ---
+    # Selector de Tipo (Al cambiar esto, la página se recarga y oculta/muestra campos)
     tipo_seleccion = st.radio(
         "¿Qué tipo de atención requiere?",
         ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud / Requerimiento (Necesito algo nuevo)"],
         horizontal=True
     )
     
-    # Limpiamos el texto para guardar algo corto en la BD
     tipo_bd = "Soporte" if "Soporte" in tipo_seleccion else "Solicitud"
 
     st.divider()
@@ -103,7 +101,15 @@ if menu == "📝 Reportar Incidencia":
             usuario = st.text_input("Su Nombre Completo")
             obra = st.text_input("Obra / Sede")
         with col2:
-            inventario = st.text_input("Cod de Inventario (Opcional si es Solicitud)")
+            # --- LÓGICA CONDICIONAL ---
+            if tipo_bd == "Soporte":
+                # Si es soporte, pedimos el inventario
+                inventario = st.text_input("Cod de Inventario")
+            else:
+                # Si es solicitud, OCULTAMOS el campo y ponemos valor automático
+                st.info("🔹 Solicitud general (No requiere código de inventario)")
+                inventario = "N/A - Solicitud"
+            
             prioridad = st.selectbox("Prioridad", ["Baja", "Normal", "Alta", "URGENTE"], index=1)
         
         asunto = st.text_input("Asunto Corto")
@@ -117,7 +123,6 @@ if menu == "📝 Reportar Incidencia":
             else:
                 fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # Insertamos INCLUYENDO EL TIPO
                 sql = """INSERT INTO incidencias_v2 
                          (fecha, tipo, usuario, obra, inventario, asunto, descripcion, prioridad, estado) 
                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Abierto')"""
@@ -134,32 +139,26 @@ elif menu == "🔒 Panel Administrador":
     
     if password == "admin123": 
         
-        # --- BOTÓN DE REPARACIÓN MANUAL ---
         with st.expander("🔧 HERRAMIENTAS DE BASE DE DATOS"):
             if st.button("Verificar Columnas Nuevas"):
-                inicializar_bd() # Ejecutamos la función de reparación
-                st.success("✅ Verificación completada. Si faltaba la columna 'tipo', se ha creado.")
+                inicializar_bd()
+                st.success("✅ Verificación completada.")
 
-        # Cargar datos
         conn = get_connection()
         try:
             df = pd.read_sql("SELECT * FROM incidencias_v2 ORDER BY id DESC", conn)
         except Exception:
-            st.error("Error leyendo datos. Intente presionar el botón de Herramientas arriba.")
             df = pd.DataFrame()
         conn.close()
 
         if not df.empty:
-            # Pestañas
             tab1, tab2, tab3 = st.tabs(["📊 Tablero Principal", "🛠 Atender Tickets", "✏️ Editar/Eliminar"])
 
             # === TAB 1: VISUALIZACIÓN ===
             with tab1:
-                # KPIs
                 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
                 kpi1.metric("Total Tickets", len(df))
                 
-                # Conteo seguro (evita errores si no hay datos)
                 abiertos = len(df[df['estado']=='Abierto']) if 'estado' in df.columns else 0
                 proceso = len(df[df['estado']=='En Proceso']) if 'estado' in df.columns else 0
                 cerrados = len(df[df['estado']=='Cerrado']) if 'estado' in df.columns else 0
@@ -170,14 +169,12 @@ elif menu == "🔒 Panel Administrador":
 
                 st.divider()
                 
-                # Filtros
                 col_filtro1, col_filtro2 = st.columns(2)
                 with col_filtro1:
                     filtro_estado = st.selectbox("Filtrar por Estado:", ["Todos", "Abierto", "En Proceso", "Cerrado"])
                 
                 df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
                 
-                # TABLA CONFIGURADA CON LA NUEVA COLUMNA 'TIPO'
                 st.dataframe(
                     df_mostrar,
                     use_container_width=True,
@@ -185,7 +182,7 @@ elif menu == "🔒 Panel Administrador":
                     column_config={
                         "id": st.column_config.NumberColumn("ID", format="%d", width="small"),
                         "fecha": st.column_config.DatetimeColumn("📅 Fecha", format="D/M/YY h:mm a"),
-                        "tipo": st.column_config.TextColumn("📌 Tipo", width="small"), # <--- AQUI SE MUESTRA
+                        "tipo": st.column_config.TextColumn("📌 Tipo", width="small"),
                         "usuario": "Usuario",
                         "asunto": "Asunto",
                         "comentarios": st.column_config.TextColumn("🔧 Comentarios", width="medium"),
@@ -194,7 +191,6 @@ elif menu == "🔒 Panel Administrador":
                     }
                 )
 
-                # Exportar Excel
                 st.divider()
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -217,7 +213,6 @@ elif menu == "🔒 Panel Administrador":
                 ticket_actual = df[df['id'] == id_atender]
                 
                 if not ticket_actual.empty:
-                    # Mostrar Tipo en la info
                     tipo_t = ticket_actual.iloc[0]['tipo'] if 'tipo' in df.columns else "N/A"
                     st.info(f"Ticket #{id_atender} ({tipo_t}) - {ticket_actual.iloc[0]['asunto']}")
                     
@@ -239,7 +234,6 @@ elif menu == "🔒 Panel Administrador":
                         if st.form_submit_button("💾 Guardar Cambios"):
                             fecha_accion = datetime.datetime.now() if nuevo_estado == "Cerrado" else None
                             
-                            # SQL SEGURO
                             if 'fecha_cierre' in df.columns and 'comentarios' in df.columns:
                                 sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
                                 params = (nuevo_estado, nuevo_comentario, fecha_accion, id_atender)
@@ -262,7 +256,6 @@ elif menu == "🔒 Panel Administrador":
                 if not ticket_edit.empty:
                     with st.expander("✏️ Editar Datos", expanded=True):
                         with st.form("form_edicion"):
-                            # Permitir editar el tipo también
                             tipo_actual = ticket_edit.iloc[0]['tipo'] if 'tipo' in df.columns else "Soporte"
                             opciones_tipo = ["Soporte", "Solicitud"]
                             idx_tipo = opciones_tipo.index(tipo_actual) if tipo_actual in opciones_tipo else 0
@@ -274,7 +267,6 @@ elif menu == "🔒 Panel Administrador":
                             e_descripcion = st.text_area("Descripción", value=ticket_edit.iloc[0]['descripcion'])
                             
                             if st.form_submit_button("Actualizar Datos"):
-                                # Verificar si existe columna tipo antes de update
                                 if 'tipo' in df.columns:
                                     sql_edit = "UPDATE incidencias_v2 SET tipo=%s, usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
                                     params_edit = (e_tipo, e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
