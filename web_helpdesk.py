@@ -40,7 +40,7 @@ def run_query(query, params=()):
         st.error(f"Error de base de datos: {e}")
         return None
 
-# Función de inicialización ROBUSTA (Intenta crear/reparar todo al inicio)
+# Función de inicialización (Verifica que existan todas las columnas)
 def inicializar_bd():
     # 1. Crear tabla base
     sql_create = """CREATE TABLE IF NOT EXISTS incidencias_v2 (
@@ -56,8 +56,7 @@ def inicializar_bd():
             )"""
     run_query(sql_create)
 
-    # 2. AUTO-REPARACIÓN SILENCIOSA
-    # Intenta agregar las columnas nuevas si no existen, para que no falle.
+    # 2. AUTO-REPARACIÓN (Agrega columnas si faltan)
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -171,18 +170,19 @@ elif menu == "🔒 Panel Administrador":
             
             df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
             
-            # TABLA CONFIGURADA
+            # TABLA CONFIGURADA CON LAS COLUMNAS QUE PEDISTE
             st.dataframe(
                 df_mostrar,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "id": st.column_config.NumberColumn("ID", format="%d", width="small"),
-                    "fecha": st.column_config.DatetimeColumn("Reportado", format="D/M/YYYY h:mm a"),
+                    # AQUI ESTÁN LOS CAMBIOS DE NOMBRE:
+                    "fecha": st.column_config.DatetimeColumn("📅 Fecha Apertura", format="D/M/YYYY h:mm a"),
                     "usuario": "Usuario",
                     "asunto": "Asunto",
-                    "comentarios": st.column_config.TextColumn("🔧 Detalles Técnicos", width="medium"),
-                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Actualizado", format="D/M/YYYY h:mm a"),
+                    "comentarios": st.column_config.TextColumn("🔧 Comentarios/Detalles", width="medium"),
+                    "fecha_cierre": st.column_config.DatetimeColumn("🏁 Fecha Cierre", format="D/M/YYYY h:mm a"),
                     "estado": st.column_config.TextColumn("Estado"),
                 }
             )
@@ -231,10 +231,13 @@ elif menu == "🔒 Panel Administrador":
                     btn_actualizar = st.form_submit_button("💾 Guardar Cambios")
                     
                     if btn_actualizar:
-                        # LOGICA DE FECHA: Guardamos fecha si es Cerrado o En Proceso
+                        # LOGICA DE FECHA CIERRE:
+                        # Solo guardamos fecha si es "Cerrado". Si se reabre, limpiamos la fecha (None)
                         fecha_accion = None
-                        if nuevo_estado in ["Cerrado", "En Proceso"]:
+                        if nuevo_estado == "Cerrado":
                             fecha_accion = datetime.datetime.now()
+                        else:
+                            fecha_accion = None # Limpiar fecha si se reabre
                         
                         col_comentarios_ok = 'comentarios' in df.columns
                         col_fecha_ok = 'fecha_cierre' in df.columns
@@ -296,4 +299,3 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
-
