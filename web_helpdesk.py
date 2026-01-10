@@ -93,11 +93,11 @@ if menu == "📝 Reportar Incidencia":
             usuario = st.text_input("Su Nombre Completo")
             obra = st.text_input("Obra / Sede")
         with col2:
-            inventario = st.text_input("Cod de Inventario")
+            inventario = st.text_input("Cod de Inventario - MYJ-EI-XXX")
             prioridad = st.selectbox("Prioridad", ["Baja", "Normal", "Alta", "URGENTE"], index=1)
         
         asunto = st.text_input("Asunto Corto")
-        descripcion = st.text_area("Descripción detallada del problema", height=100)
+        descripcion = st.text_area("Descripción detallada del problema / Solicitud", height=100)
         
         enviado = st.form_submit_button("🚀 ENVIAR REPORTE")
         
@@ -299,3 +299,4 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
