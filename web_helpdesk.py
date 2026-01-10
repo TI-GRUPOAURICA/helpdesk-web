@@ -3,6 +3,7 @@ import mysql.connector
 import pandas as pd
 import datetime
 import io 
+import pytz # Librería para Zona Horaria
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -39,6 +40,11 @@ def run_query(query, params=()):
     except Exception as e:
         st.error(f"Error de base de datos: {e}")
         return None
+
+# Función para obtener hora de PERÚ
+def obtener_hora_peru():
+    zona_peru = pytz.timezone('America/Lima')
+    return datetime.datetime.now(zona_peru)
 
 # Función de inicialización
 def inicializar_bd():
@@ -84,10 +90,10 @@ if menu == "📝 Reportar Incidencia":
     st.title("📝 Reportar Ticket")
     st.markdown("Seleccione el tipo de atención y complete el formulario.")
 
-    # Selector de Tipo (Al cambiar esto, la página se recarga y oculta/muestra campos)
+    # Selector de Tipo
     tipo_seleccion = st.radio(
         "¿Qué tipo de atención requiere?",
-        ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud "],
+        ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud / Requerimiento (Necesito algo nuevo)"],
         horizontal=True
     )
     
@@ -103,10 +109,8 @@ if menu == "📝 Reportar Incidencia":
         with col2:
             # --- LÓGICA CONDICIONAL ---
             if tipo_bd == "Soporte":
-                # Si es soporte, pedimos el inventario
-                inventario = st.text_input("Cod de Inventario - MYJ-EI-XXX ")
+                inventario = st.text_input("Cod de Inventario")
             else:
-                # Si es solicitud, OCULTAMOS el campo y ponemos valor automático
                 st.info("🔹 Solicitud general (No requiere código de inventario)")
                 inventario = "N/A - Solicitud"
             
@@ -121,14 +125,15 @@ if menu == "📝 Reportar Incidencia":
             if not usuario or not obra or not asunto or not descripcion:
                 st.warning("⚠️ Por favor complete los campos obligatorios.")
             else:
-                fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # AQUI USAMOS LA HORA DE PERÚ
+                fecha = obtener_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
                 
                 sql = """INSERT INTO incidencias_v2 
                          (fecha, tipo, usuario, obra, inventario, asunto, descripcion, prioridad, estado) 
                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Abierto')"""
                 
                 if run_query(sql, (fecha, tipo_bd, usuario, obra, inventario, asunto, descripcion, prioridad)):
-                    st.success(f"✅ ¡{tipo_bd} registrado correctamente!")
+                    st.success(f"✅ ¡{tipo_bd} registrado correctamente con hora local!")
                     st.balloons()
 
 # --- 5. PÁGINA: ADMINISTRADOR ---
@@ -232,7 +237,8 @@ elif menu == "🔒 Panel Administrador":
                         nuevo_comentario = st.text_area("Comentarios Técnicos", value=valor_comentario)
                         
                         if st.form_submit_button("💾 Guardar Cambios"):
-                            fecha_accion = datetime.datetime.now() if nuevo_estado == "Cerrado" else None
+                            # AQUI USAMOS LA HORA DE PERÚ PARA EL CIERRE
+                            fecha_accion = obtener_hora_peru() if nuevo_estado == "Cerrado" else None
                             
                             if 'fecha_cierre' in df.columns and 'comentarios' in df.columns:
                                 sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
@@ -288,4 +294,3 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
-
