@@ -90,7 +90,7 @@ if menu == "📝 Reportar Incidencia":
 
     tipo_seleccion = st.radio(
         "¿Qué tipo de atención requiere?",
-        ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud)"],
+        ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud"],
         horizontal=True
     )
     
@@ -108,7 +108,7 @@ if menu == "📝 Reportar Incidencia":
                 inventario = st.text_input("Cod de Inventario - MYJ-EI-XXX")
             else:
                 st.info("🔹 Solicitud general (No requiere código de inventario)")
-                inventario = "N/A - Solicitud"
+                inventario = "Solicitud"
             
             prioridad = st.selectbox("Prioridad", ["Baja", "Normal", "Alta", "URGENTE"], index=1)
         
@@ -346,4 +346,5 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
