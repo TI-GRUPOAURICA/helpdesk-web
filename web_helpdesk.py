@@ -4,14 +4,6 @@ import pandas as pd
 import datetime
 import io 
 import pytz 
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-# --- CONFIGURACIÓN DE CORREO (Opcional) ---
-# Si no funciona, el sistema seguirá trabajando igual.
-EMAIL_REMITENTE = "tu_correo@gmail.com"  
-EMAIL_PASSWORD = "xxxx xxxx xxxx xxxx"   
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -53,41 +45,6 @@ def obtener_hora_peru():
     zona_peru = pytz.timezone('America/Lima')
     return datetime.datetime.now(zona_peru)
 
-# --- FUNCIÓN DE ENVÍO DE CORREO (A prueba de fallos) ---
-def enviar_notificacion(destinatario, id_ticket, asunto, usuario):
-    try:
-        # Si no han configurado la contraseña, salimos sin hacer nada (sin error)
-        if "xxxx" in EMAIL_PASSWORD or "tu_correo" in EMAIL_REMITENTE:
-            return False 
-            
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_REMITENTE
-        msg['To'] = destinatario
-        msg['Subject'] = f"Ticket #{id_ticket} Recibido - HelpDesk"
-
-        cuerpo = f"""
-        Hola {usuario},
-        
-        Su ticket ha sido registrado exitosamente.
-        
-        📌 ID del Ticket: {id_ticket}
-        📝 Asunto: {asunto}
-        📅 Fecha: {obtener_hora_peru().strftime('%d/%m/%Y %H:%M')}
-        
-        Puede consultar el estado en la sección 'Rastrear Ticket' usando su ID.
-        """
-        msg.attach(MIMEText(cuerpo, 'plain'))
-
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(EMAIL_REMITENTE, EMAIL_PASSWORD)
-        text = msg.as_string()
-        server.sendmail(EMAIL_REMITENTE, destinatario, text)
-        server.quit()
-        return True
-    except Exception:
-        return False # Si falla, simplemente retornamos False y seguimos
-
 # --- INICIALIZACIÓN Y REPARACIÓN DE BD ---
 def inicializar_bd():
     sql_create = """CREATE TABLE IF NOT EXISTS incidencias_v2 (
@@ -103,12 +60,11 @@ def inicializar_bd():
             )"""
     run_query(sql_create)
 
-    # Verificar columnas faltantes
+    # Verificar columnas faltantes (Quitamos email de la lista)
     columnas_nuevas = [
         ("comentarios", "TEXT"),
         ("fecha_cierre", "DATETIME"),
-        ("tipo", "VARCHAR(50)"),
-        ("email", "VARCHAR(100)")
+        ("tipo", "VARCHAR(50)")
     ]
 
     for col_nombre, col_tipo in columnas_nuevas:
@@ -147,9 +103,8 @@ if menu == "📝 Reportar Incidencia":
         col1, col2 = st.columns(2)
         with col1:
             usuario = st.text_input("Su Nombre Completo")
-            email = st.text_input("Su Correo (Opcional)")
-        with col2:
             obra = st.text_input("Obra / Sede")
+        with col2:
             if tipo_bd == "Soporte":
                 inventario = st.text_input("Cod de Inventario")
             else:
@@ -170,11 +125,12 @@ if menu == "📝 Reportar Incidencia":
                 
                 conn = get_connection()
                 cursor = conn.cursor()
+                # SQL SIN EMAIL
                 sql = """INSERT INTO incidencias_v2 
-                         (fecha, tipo, usuario, email, obra, inventario, asunto, descripcion, prioridad, estado) 
-                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Abierto')"""
+                         (fecha, tipo, usuario, obra, inventario, asunto, descripcion, prioridad, estado) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Abierto')"""
                 try:
-                    cursor.execute(sql, (fecha, tipo_bd, usuario, email, obra, inventario, asunto, descripcion, prioridad))
+                    cursor.execute(sql, (fecha, tipo_bd, usuario, obra, inventario, asunto, descripcion, prioridad))
                     conn.commit()
                     
                     # --- AQUÍ OBTENEMOS EL ID DEL TICKET ---
@@ -184,17 +140,13 @@ if menu == "📝 Reportar Incidencia":
                     st.balloons()
                     st.success("✅ ¡Incidencia registrada correctamente!")
                     
-                    # --- MENSAJE IMPORTANTE PARA EL USUARIO ---
+                    # --- MENSAJE GIGANTE PARA EL USUARIO ---
                     st.markdown(f"""
                     <div style="background-color: #d1e7dd; color: #0f5132; padding: 20px; border-radius: 10px; border: 2px solid #badbcc; text-align: center; margin-top: 10px; margin-bottom: 20px;">
                         <h2 style="margin:0;">TICKET ID: {id_generado}</h2>
                         <p style="font-size: 18px; margin-top: 10px;">📸 <strong>Tome nota o capture este número</strong><br>lo necesitará para consultar el estado de su solicitud.</p>
                     </div>
                     """, unsafe_allow_html=True)
-                    
-                    # Intento silencioso de enviar correo (si falla, no molesta al usuario)
-                    if email and "@" in email:
-                        enviar_notificacion(email, id_generado, asunto, usuario)
                     
                 except Exception as e:
                     st.error(f"Error guardando ticket: {e}")
@@ -234,14 +186,12 @@ elif menu == "🔍 Rastrear Ticket":
                 c1.markdown(f"**👤 Usuario:** {ticket['usuario']}")
                 c1.markdown(f"**📝 Asunto:** {ticket['asunto']}")
                 
-                # Check seguro para columna tipo
                 tipo_t = ticket['tipo'] if 'tipo' in df.columns else "Soporte"
                 c2.markdown(f"**📌 Tipo:** {tipo_t}")
                 
                 st.divider()
                 st.markdown("#### 🔧 Respuesta Técnica / Comentarios:")
                 
-                # Check seguro para comentarios
                 coment = ticket['comentarios'] if 'comentarios' in df.columns and ticket['comentarios'] else "Su solicitud está en cola de atención."
                 st.info(coment)
                 
@@ -263,7 +213,7 @@ elif menu == "🔒 Panel Administrador":
     
     rol = None
     if password == "admin123": rol = "admin"
-    elif password == "visita": rol = "invitado" # Clave para cliente/gerente
+    elif password == "visita": rol = "invitado" 
     
     if rol:
         if rol == "admin":
@@ -328,7 +278,6 @@ elif menu == "🔒 Panel Administrador":
                             "fecha": st.column_config.DatetimeColumn("📅 Fecha", format="D/M/YY h:mm a"),
                             "tipo": st.column_config.TextColumn("📌 Tipo", width="small"),
                             "usuario": "Usuario",
-                            "email": "Email",
                             "asunto": "Asunto",
                             "comentarios": st.column_config.TextColumn("🔧 Comentarios", width="medium"),
                             "fecha_cierre": st.column_config.DatetimeColumn("🏁 Cierre", format="D/M/YY h:mm a"),
@@ -386,14 +335,13 @@ elif menu == "🔒 Panel Administrador":
                                 idx_tipo = opciones_tipo.index(tipo_actual) if tipo_actual in opciones_tipo else 0
                                 e_tipo = st.selectbox("Tipo", opciones_tipo, index=idx_tipo)
                                 e_usuario = st.text_input("Usuario", value=ticket_edit.iloc[0]['usuario'])
-                                e_email = st.text_input("Email", value=ticket_edit.iloc[0]['email'] if 'email' in df.columns else "")
                                 e_inventario = st.text_input("Inventario", value=ticket_edit.iloc[0]['inventario'])
                                 e_obra = st.text_input("Obra", value=ticket_edit.iloc[0]['obra'])
                                 e_descripcion = st.text_area("Descripción", value=ticket_edit.iloc[0]['descripcion'])
                                 if st.form_submit_button("Actualizar Datos"):
                                     if 'tipo' in df.columns:
-                                        sql_edit = "UPDATE incidencias_v2 SET tipo=%s, usuario=%s, email=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
-                                        params_edit = (e_tipo, e_usuario, e_email, e_inventario, e_obra, e_descripcion, id_editar)
+                                        sql_edit = "UPDATE incidencias_v2 SET tipo=%s, usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
+                                        params_edit = (e_tipo, e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
                                     else:
                                         sql_edit = "UPDATE incidencias_v2 SET usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
                                         params_edit = (e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
