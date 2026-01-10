@@ -80,8 +80,8 @@ def inicializar_bd():
 inicializar_bd()
 
 # --- 3. BARRA LATERAL (NAVEGACIÓN) ---
-# Cambiamos la URL por el nombre de tu archivo
-st.sidebar.image("YL.png", width=150)
+# Puedes cambiar el link por el de tu empresa
+st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1067/1067566.png", width=120)
 st.sidebar.title("Navegación")
 menu = st.sidebar.radio("Ir a:", ["📝 Reportar Incidencia", "🔍 Rastrear Ticket", "🔒 Panel Administrador"])
 
@@ -359,6 +359,7 @@ elif menu == "🔒 Panel Administrador":
         if password:
             st.error("Contraseña incorrecta")
         st.info("Ingrese la contraseña en la barra lateral.")
+
 
 
 
