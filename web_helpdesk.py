@@ -3,7 +3,7 @@ import mysql.connector
 import pandas as pd
 import datetime
 import io 
-import pytz # Librería para Zona Horaria
+import pytz 
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -41,7 +41,6 @@ def run_query(query, params=()):
         st.error(f"Error de base de datos: {e}")
         return None
 
-# Función para obtener hora de PERÚ
 def obtener_hora_peru():
     zona_peru = pytz.timezone('America/Lima')
     return datetime.datetime.now(zona_peru)
@@ -61,7 +60,6 @@ def inicializar_bd():
             )"""
     run_query(sql_create)
 
-    # AUTO-REPARACIÓN DE COLUMNAS
     columnas_nuevas = [
         ("comentarios", "TEXT"),
         ("fecha_cierre", "DATETIME"),
@@ -90,7 +88,6 @@ if menu == "📝 Reportar Incidencia":
     st.title("📝 Reportar Ticket")
     st.markdown("Seleccione el tipo de atención y complete el formulario.")
 
-    # Selector de Tipo
     tipo_seleccion = st.radio(
         "¿Qué tipo de atención requiere?",
         ["🛠 Soporte Técnico (Algo falla)", "📋 Solicitud / Requerimiento (Necesito algo nuevo)"],
@@ -107,7 +104,6 @@ if menu == "📝 Reportar Incidencia":
             usuario = st.text_input("Su Nombre Completo")
             obra = st.text_input("Obra / Sede")
         with col2:
-            # --- LÓGICA CONDICIONAL ---
             if tipo_bd == "Soporte":
                 inventario = st.text_input("Cod de Inventario")
             else:
@@ -125,7 +121,6 @@ if menu == "📝 Reportar Incidencia":
             if not usuario or not obra or not asunto or not descripcion:
                 st.warning("⚠️ Por favor complete los campos obligatorios.")
             else:
-                # AQUI USAMOS LA HORA DE PERÚ
                 fecha = obtener_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
                 
                 sql = """INSERT INTO incidencias_v2 
@@ -133,22 +128,33 @@ if menu == "📝 Reportar Incidencia":
                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Abierto')"""
                 
                 if run_query(sql, (fecha, tipo_bd, usuario, obra, inventario, asunto, descripcion, prioridad)):
-                    st.success(f"✅ ¡{tipo_bd} registrado correctamente con hora local!")
+                    st.success(f"✅ ¡{tipo_bd} registrado correctamente!")
                     st.balloons()
 
-# --- 5. PÁGINA: ADMINISTRADOR ---
+# --- 5. PÁGINA: ADMINISTRADOR (CON DOBLE ACCESO) ---
 elif menu == "🔒 Panel Administrador":
     st.title("🔒 Gestión de Tickets")
     
-    password = st.sidebar.text_input("Contraseña Admin", type="password")
+    # Caja de contraseña única
+    password = st.sidebar.text_input("Contraseña de Acceso", type="password")
     
-    if password == "admin123": 
+    # --- LOGICA DE ROLES ---
+    rol = None
+    if password == "admin123":
+        rol = "admin"
+    elif password == "visita":  # <--- CLAVE PARA EL INVITADO
+        rol = "invitado"
+    
+    if rol: # Si la contraseña es alguna de las dos
         
-        with st.expander("🔧 HERRAMIENTAS DE BASE DE DATOS"):
-            if st.button("Verificar Columnas Nuevas"):
-                inicializar_bd()
-                st.success("✅ Verificación completada.")
+        # Solo el admin ve el botón de reparación
+        if rol == "admin":
+            with st.expander("🔧 HERRAMIENTAS DE BASE DE DATOS"):
+                if st.button("Verificar Columnas Nuevas"):
+                    inicializar_bd()
+                    st.success("✅ Verificación completada.")
 
+        # Cargar datos (Lo hacen ambos)
         conn = get_connection()
         try:
             df = pd.read_sql("SELECT * FROM incidencias_v2 ORDER BY id DESC", conn)
@@ -157,10 +163,14 @@ elif menu == "🔒 Panel Administrador":
         conn.close()
 
         if not df.empty:
-            tab1, tab2, tab3 = st.tabs(["📊 Tablero Principal", "🛠 Atender Tickets", "✏️ Editar/Eliminar"])
-
-            # === TAB 1: VISUALIZACIÓN ===
-            with tab1:
+            
+            # --- INTERFAZ SEGÚN ROL ---
+            
+            if rol == "invitado":
+                st.info("👀 Modo Vista: Usted está viendo el estado de los tickets como invitado.")
+                # El invitado NO ve pestañas, solo ve el Tablero directamente
+                
+                # KPIs
                 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
                 kpi1.metric("Total Tickets", len(df))
                 
@@ -174,12 +184,14 @@ elif menu == "🔒 Panel Administrador":
 
                 st.divider()
                 
+                # Filtros
                 col_filtro1, col_filtro2 = st.columns(2)
                 with col_filtro1:
                     filtro_estado = st.selectbox("Filtrar por Estado:", ["Todos", "Abierto", "En Proceso", "Cerrado"])
                 
                 df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
                 
+                # Tabla
                 st.dataframe(
                     df_mostrar,
                     use_container_width=True,
@@ -195,100 +207,140 @@ elif menu == "🔒 Panel Administrador":
                         "estado": st.column_config.TextColumn("Estado"),
                     }
                 )
+                
+            elif rol == "admin":
+                # El admin ve todo con PESTAÑAS
+                tab1, tab2, tab3 = st.tabs(["📊 Tablero Principal", "🛠 Atender Tickets", "✏️ Editar/Eliminar"])
 
-                st.divider()
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Reporte')
-                st.download_button(
-                    label="📥 Descargar Excel",
-                    data=buffer,
-                    file_name=f"Reporte_HelpDesk_{datetime.date.today()}.xlsx",
-                    mime="application/vnd.ms-excel"
-                )
-
-            # === TAB 2: ATENDER TICKETS ===
-            with tab2:
-                st.subheader("Actualizar Estado")
-                col_a1, col_a2 = st.columns([1, 3])
-                
-                with col_a1:
-                    id_atender = st.number_input("ID Ticket:", min_value=1, step=1)
-                
-                ticket_actual = df[df['id'] == id_atender]
-                
-                if not ticket_actual.empty:
-                    tipo_t = ticket_actual.iloc[0]['tipo'] if 'tipo' in df.columns else "N/A"
-                    st.info(f"Ticket #{id_atender} ({tipo_t}) - {ticket_actual.iloc[0]['asunto']}")
+                # === TAB 1: VISUALIZACIÓN ===
+                with tab1:
+                    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+                    kpi1.metric("Total Tickets", len(df))
                     
-                    with st.form("form_atencion"):
-                        estado_actual = ticket_actual.iloc[0]['estado']
-                        opciones = ["Abierto", "En Proceso", "Cerrado"]
-                        idx = opciones.index(estado_actual) if estado_actual in opciones else 0
-                        
-                        nuevo_estado = st.selectbox("Nuevo Estado", opciones, index=idx)
-                        
-                        valor_comentario = ""
-                        if 'comentarios' in df.columns:
-                            val = ticket_actual.iloc[0]['comentarios']
-                            if val is not None and str(val).strip() != "":
-                                valor_comentario = str(val)
-
-                        nuevo_comentario = st.text_area("Comentarios Técnicos", value=valor_comentario)
-                        
-                        if st.form_submit_button("💾 Guardar Cambios"):
-                            # AQUI USAMOS LA HORA DE PERÚ PARA EL CIERRE
-                            fecha_accion = obtener_hora_peru() if nuevo_estado == "Cerrado" else None
-                            
-                            if 'fecha_cierre' in df.columns and 'comentarios' in df.columns:
-                                sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
-                                params = (nuevo_estado, nuevo_comentario, fecha_accion, id_atender)
-                                run_query(sql, params)
-                                st.success("✅ Actualizado correctamente.")
-                                st.rerun()
-                else:
-                    st.warning("Ingrese un ID válido.")
-
-            # === TAB 3: EDITAR O ELIMINAR ===
-            with tab3:
-                st.subheader("✏️ Editar / Borrar")
-                
-                col_e1, col_e2 = st.columns([1, 3])
-                with col_e1:
-                    id_editar = st.number_input("ID Ticket:", min_value=1, step=1, key="edit_id")
-                
-                ticket_edit = df[df['id'] == id_editar]
-                
-                if not ticket_edit.empty:
-                    with st.expander("✏️ Editar Datos", expanded=True):
-                        with st.form("form_edicion"):
-                            tipo_actual = ticket_edit.iloc[0]['tipo'] if 'tipo' in df.columns else "Soporte"
-                            opciones_tipo = ["Soporte", "Solicitud"]
-                            idx_tipo = opciones_tipo.index(tipo_actual) if tipo_actual in opciones_tipo else 0
-                            
-                            e_tipo = st.selectbox("Tipo", opciones_tipo, index=idx_tipo)
-                            e_usuario = st.text_input("Usuario", value=ticket_edit.iloc[0]['usuario'])
-                            e_inventario = st.text_input("Inventario", value=ticket_edit.iloc[0]['inventario'])
-                            e_obra = st.text_input("Obra", value=ticket_edit.iloc[0]['obra'])
-                            e_descripcion = st.text_area("Descripción", value=ticket_edit.iloc[0]['descripcion'])
-                            
-                            if st.form_submit_button("Actualizar Datos"):
-                                if 'tipo' in df.columns:
-                                    sql_edit = "UPDATE incidencias_v2 SET tipo=%s, usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
-                                    params_edit = (e_tipo, e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
-                                else:
-                                    sql_edit = "UPDATE incidencias_v2 SET usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
-                                    params_edit = (e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
-
-                                run_query(sql_edit, params_edit)
-                                st.success("Datos corregidos.")
-                                st.rerun()
+                    abiertos = len(df[df['estado']=='Abierto']) if 'estado' in df.columns else 0
+                    proceso = len(df[df['estado']=='En Proceso']) if 'estado' in df.columns else 0
+                    cerrados = len(df[df['estado']=='Cerrado']) if 'estado' in df.columns else 0
                     
+                    kpi2.metric("Abiertos", abiertos, delta_color="inverse")
+                    kpi3.metric("En Proceso", proceso, delta_color="off")
+                    kpi4.metric("Cerrados", cerrados, delta_color="normal")
+
                     st.divider()
-                    if st.button("🗑 ELIMINAR TICKET", type="primary"):
-                        run_query("DELETE FROM incidencias_v2 WHERE id=%s", (id_editar,))
-                        st.error("Ticket eliminado.")
-                        st.rerun()
+                    
+                    col_filtro1, col_filtro2 = st.columns(2)
+                    with col_filtro1:
+                        filtro_estado = st.selectbox("Filtrar por Estado:", ["Todos", "Abierto", "En Proceso", "Cerrado"])
+                    
+                    df_mostrar = df if filtro_estado == "Todos" else df[df['estado'] == filtro_estado]
+                    
+                    st.dataframe(
+                        df_mostrar,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "id": st.column_config.NumberColumn("ID", format="%d", width="small"),
+                            "fecha": st.column_config.DatetimeColumn("📅 Fecha", format="D/M/YY h:mm a"),
+                            "tipo": st.column_config.TextColumn("📌 Tipo", width="small"),
+                            "usuario": "Usuario",
+                            "asunto": "Asunto",
+                            "comentarios": st.column_config.TextColumn("🔧 Comentarios", width="medium"),
+                            "fecha_cierre": st.column_config.DatetimeColumn("🏁 Cierre", format="D/M/YY h:mm a"),
+                            "estado": st.column_config.TextColumn("Estado"),
+                        }
+                    )
+
+                    st.divider()
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                        df.to_excel(writer, index=False, sheet_name='Reporte')
+                    st.download_button(
+                        label="📥 Descargar Excel",
+                        data=buffer,
+                        file_name=f"Reporte_HelpDesk_{datetime.date.today()}.xlsx",
+                        mime="application/vnd.ms-excel"
+                    )
+
+                # === TAB 2: ATENDER TICKETS ===
+                with tab2:
+                    st.subheader("Actualizar Estado")
+                    col_a1, col_a2 = st.columns([1, 3])
+                    
+                    with col_a1:
+                        id_atender = st.number_input("ID Ticket:", min_value=1, step=1)
+                    
+                    ticket_actual = df[df['id'] == id_atender]
+                    
+                    if not ticket_actual.empty:
+                        tipo_t = ticket_actual.iloc[0]['tipo'] if 'tipo' in df.columns else "N/A"
+                        st.info(f"Ticket #{id_atender} ({tipo_t}) - {ticket_actual.iloc[0]['asunto']}")
+                        
+                        with st.form("form_atencion"):
+                            estado_actual = ticket_actual.iloc[0]['estado']
+                            opciones = ["Abierto", "En Proceso", "Cerrado"]
+                            idx = opciones.index(estado_actual) if estado_actual in opciones else 0
+                            
+                            nuevo_estado = st.selectbox("Nuevo Estado", opciones, index=idx)
+                            
+                            valor_comentario = ""
+                            if 'comentarios' in df.columns:
+                                val = ticket_actual.iloc[0]['comentarios']
+                                if val is not None and str(val).strip() != "":
+                                    valor_comentario = str(val)
+
+                            nuevo_comentario = st.text_area("Comentarios Técnicos", value=valor_comentario)
+                            
+                            if st.form_submit_button("💾 Guardar Cambios"):
+                                fecha_accion = obtener_hora_peru() if nuevo_estado == "Cerrado" else None
+                                
+                                if 'fecha_cierre' in df.columns and 'comentarios' in df.columns:
+                                    sql = "UPDATE incidencias_v2 SET estado=%s, comentarios=%s, fecha_cierre=%s WHERE id=%s"
+                                    params = (nuevo_estado, nuevo_comentario, fecha_accion, id_atender)
+                                    run_query(sql, params)
+                                    st.success("✅ Actualizado correctamente.")
+                                    st.rerun()
+                    else:
+                        st.warning("Ingrese un ID válido.")
+
+                # === TAB 3: EDITAR O ELIMINAR ===
+                with tab3:
+                    st.subheader("✏️ Editar / Borrar")
+                    
+                    col_e1, col_e2 = st.columns([1, 3])
+                    with col_e1:
+                        id_editar = st.number_input("ID Ticket:", min_value=1, step=1, key="edit_id")
+                    
+                    ticket_edit = df[df['id'] == id_editar]
+                    
+                    if not ticket_edit.empty:
+                        with st.expander("✏️ Editar Datos", expanded=True):
+                            with st.form("form_edicion"):
+                                tipo_actual = ticket_edit.iloc[0]['tipo'] if 'tipo' in df.columns else "Soporte"
+                                opciones_tipo = ["Soporte", "Solicitud"]
+                                idx_tipo = opciones_tipo.index(tipo_actual) if tipo_actual in opciones_tipo else 0
+                                
+                                e_tipo = st.selectbox("Tipo", opciones_tipo, index=idx_tipo)
+                                e_usuario = st.text_input("Usuario", value=ticket_edit.iloc[0]['usuario'])
+                                e_inventario = st.text_input("Inventario", value=ticket_edit.iloc[0]['inventario'])
+                                e_obra = st.text_input("Obra", value=ticket_edit.iloc[0]['obra'])
+                                e_descripcion = st.text_area("Descripción", value=ticket_edit.iloc[0]['descripcion'])
+                                
+                                if st.form_submit_button("Actualizar Datos"):
+                                    if 'tipo' in df.columns:
+                                        sql_edit = "UPDATE incidencias_v2 SET tipo=%s, usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
+                                        params_edit = (e_tipo, e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
+                                    else:
+                                        sql_edit = "UPDATE incidencias_v2 SET usuario=%s, inventario=%s, obra=%s, descripcion=%s WHERE id=%s"
+                                        params_edit = (e_usuario, e_inventario, e_obra, e_descripcion, id_editar)
+
+                                    run_query(sql_edit, params_edit)
+                                    st.success("Datos corregidos.")
+                                    st.rerun()
+                        
+                        st.divider()
+                        if st.button("🗑 ELIMINAR TICKET", type="primary"):
+                            run_query("DELETE FROM incidencias_v2 WHERE id=%s", (id_editar,))
+                            st.error("Ticket eliminado.")
+                            st.rerun()
 
     else:
         if password:
